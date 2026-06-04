@@ -33,8 +33,8 @@ try {
 
     // Get stats
     $stats = [
-        'today' => (int) $pdo->query("SELECT COUNT(*) FROM indoor_records WHERE admission_date = CURDATE()")->fetchColumn(),
-        'month' => (int) $pdo->query("SELECT COUNT(*) FROM indoor_records WHERE YEAR(admission_date) = YEAR(CURDATE()) AND MONTH(admission_date) = MONTH(CURDATE())")->fetchColumn(),
+        'today' => (int) $pdo->query("SELECT COUNT(*) FROM indoor_records WHERE CAST(admission_date AS DATE) = CAST(GETDATE() AS DATE)")->fetchColumn(),
+        'month' => (int) $pdo->query("SELECT COUNT(*) FROM indoor_records WHERE DATEPART(YEAR, admission_date) = DATEPART(YEAR, GETDATE()) AND DATEPART(MONTH, admission_date) = DATEPART(MONTH, GETDATE())")->fetchColumn(),
         'total' => (int) $pdo->query("SELECT COUNT(*) FROM indoor_records")->fetchColumn(),
     ];
 

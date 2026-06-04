@@ -4,26 +4,43 @@ declare(strict_types=1);
 require_once __DIR__ . '/../config/database.php';
 
 try {
+    // Only POST requests allowed
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        jsonResponse(['success' => false, 'message' => 'Only POST requests are allowed.'], 405);
+        http_response_code(405);
+        jsonResponse(['success' => false, 'message' => 'Only POST requests are allowed.']);
     }
 
+    // Read and validate JSON body
     $body = readJsonBody();
-    $rows = $body['patients'] ?? null;
+    $records = $body['records'] ?? null;
 
-    if (!is_array($rows)) {
-        jsonResponse(['success' => false, 'message' => 'Patients payload is required.'], 400);
+    if (!is_array($records) || count($records) === 0) {
+        http_response_code(400);
+        jsonResponse(['success' => false, 'message' => 'Records array is required and cannot be empty.']);
+    }
+
+    // Verify CSRF token if provided
+    $csrfToken = $body['csrf_token'] ?? ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? null);
+    if ($csrfToken && !verify_csrf($csrfToken)) {
+        http_response_code(403);
+        jsonResponse(['success' => false, 'message' => 'Invalid security token.']);
     }
 
     $pdo = getPdo();
     $pdo->beginTransaction();
 
-    $insertSql = 'INSERT INTO indoor_patient_register
-        (yearly_no, monthly_no, admission_date, admission_time, employee_no, patient_name, address, age, sex, diagnosis_complaints, ent_pvt, nonent, dod, staff_nurse, doctor_name, remarks)
-        VALUES
-        (:yearly_no, :monthly_no, :admission_date, :admission_time, :employee_no, :patient_name, :address, :age, :sex, :diagnosis_complaints, :ent_pvt, :nonent, :dod, :staff_nurse, :doctor_name, :remarks)';
+    $insertSql = 'INSERT INTO indoor_records (
+        sno, yearly_no, monthly_no, admission_date, admission_time,
+        employee_no, patient_name, address, age, sex, diagnosis,
+        ent_pvt, nonent, dod, staff_nurse, doctor_name, remarks
+    ) VALUES (
+        :sno, :yearly_no, :monthly_no, :admission_date, :admission_time,
+        :employee_no, :patient_name, :address, :age, :sex, :diagnosis,
+        :ent_pvt, :nonent, :dod, :staff_nurse, :doctor_name, :remarks
+    )';
 
-    $updateSql = 'UPDATE indoor_patient_register SET
+    $updateSql = 'UPDATE indoor_records SET
+        sno = :sno,
         yearly_no = :yearly_no,
         monthly_no = :monthly_no,
         admission_date = :admission_date,
@@ -33,82 +50,126 @@ try {
         address = :address,
         age = :age,
         sex = :sex,
-        diagnosis_complaints = :diagnosis_complaints,
+        diagnosis = :diagnosis,
         ent_pvt = :ent_pvt,
         nonent = :nonent,
         dod = :dod,
         staff_nurse = :staff_nurse,
         doctor_name = :doctor_name,
-        remarks = :remarks
+        remarks = :remarks,
+        updated_at = GETDATE()
         WHERE id = :id';
 
     $insertStmt = $pdo->prepare($insertSql);
     $updateStmt = $pdo->prepare($updateSql);
     $savedIds = [];
+    $savedCount = 0;
 
-    foreach ($rows as $index => $row) {
-        if (!is_array($row)) {
-            throw new InvalidArgumentException('Invalid row at position ' . ($index + 1) . '.');
+    foreach ($records as $index => $record) {
+        if (!is_array($record)) {
+            throw new InvalidArgumentException('Invalid record format at row ' . ($index + 1) . '.');
         }
 
-        $params = buildPatientParams($row, $index);
-        $id = isset($row['id']) ? (int) $row['id'] : 0;
+        // Build and validate parameters
+        $params = buildRecordParams($record, $index);
+        $recordId = isset($record['id']) && (int)$record['id'] > 0 ? (int)$record['id'] : 0;
 
-        if ($id > 0) {
-            $updateStmt->execute($params + [':id' => $id]);
-            $savedIds[] = $id;
+        if ($recordId > 0) {
+            // Update existing record
+            $params[':id'] = $recordId;
+            $updateStmt->execute($params);
+            $savedIds[] = $recordId;
         } else {
+            // Insert new record
             $insertStmt->execute($params);
-            $savedIds[] = (int) $pdo->lastInsertId();
+            $newId = (int)$pdo->lastInsertId();
+            $savedIds[] = $newId;
         }
+
+        $savedCount++;
     }
 
     $pdo->commit();
 
     jsonResponse([
         'success' => true,
-        'message' => count($savedIds) . ' record(s) saved successfully.',
-        'ids' => $savedIds,
+        'message' => $savedCount . ' record(s) saved successfully.',
+        'count' => $savedCount,
+        'ids' => $savedIds
     ]);
+
 } catch (Throwable $exception) {
     if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
         $pdo->rollBack();
     }
-
-    jsonResponse(['success' => false, 'message' => $exception->getMessage()], 500);
+    
+    http_response_code(500);
+    jsonResponse(['success' => false, 'message' => $exception->getMessage()]);
 }
 
-function buildPatientParams(array $row, int $index): array
+/**
+ * Build and validate parameters for record insert/update
+ * @param array $record Record data
+ * @param int $index Row index (for error messages)
+ * @return array Validated parameters
+ */
+function buildRecordParams(array $record, int $index): array
 {
-    $admissionDate = normalizeDate($row['admission_date'] ?? '');
-    $dod = normalizeDate($row['dod'] ?? '');
-    $admissionTime = normalizeTime($row['admission_time'] ?? '');
-    $age = trim((string) ($row['age'] ?? ''));
+    // Normalize date fields
+    $admissionDate = normalizeDate($record['admission_date'] ?? '');
+    $dod = normalizeDate($record['dod'] ?? '');
+    $admissionTime = normalizeTime($record['admission_time'] ?? '');
 
-    if ($admissionDate === null || trim((string) ($row['patient_name'] ?? '')) === '' || $age === '' || trim((string) ($row['sex'] ?? '')) === '' || trim((string) ($row['diagnosis_complaints'] ?? '')) === '') {
-        throw new InvalidArgumentException('Required fields missing in row ' . ($index + 1) . '. Date, Patient Name, Age, Sex, and Diagnosis are required.');
+    // Extract and clean fields
+    $patientName = sanitize($record['patient_name'] ?? '');
+    $age = sanitize($record['age'] ?? '');
+    $sex = sanitize($record['sex'] ?? '');
+    $diagnosis = sanitize($record['diagnosis'] ?? '');
+
+    // Validate required fields
+    if ($admissionDate === null) {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Admission date is required and must be a valid date.');
     }
 
-    if (!ctype_digit($age) || (int) $age > 130) {
-        throw new InvalidArgumentException('Age must be a valid number between 0 and 130 in row ' . ($index + 1) . '.');
+    if ($patientName === '') {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Patient name is required.');
+    }
+
+    if ($age === '') {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Age is required.');
+    }
+
+    if ($sex === '') {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Sex is required.');
+    }
+
+    if ($diagnosis === '') {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Diagnosis is required.');
+    }
+
+    // Validate age is numeric and in valid range
+    if (!ctype_digit($age) || (int)$age > 150) {
+        throw new InvalidArgumentException('Row ' . ($index + 1) . ': Age must be a valid number between 0 and 150.');
     }
 
     return [
-        ':yearly_no' => trim((string) ($row['yearly_no'] ?? '')),
-        ':monthly_no' => trim((string) ($row['monthly_no'] ?? '')),
+        ':sno' => sanitize($record['sno'] ?? ''),
+        ':yearly_no' => sanitize($record['yearly_no'] ?? ''),
+        ':monthly_no' => sanitize($record['monthly_no'] ?? ''),
         ':admission_date' => $admissionDate,
         ':admission_time' => $admissionTime,
-        ':employee_no' => trim((string) ($row['employee_no'] ?? '')),
-        ':patient_name' => trim((string) ($row['patient_name'] ?? '')),
-        ':address' => trim((string) ($row['address'] ?? '')),
-        ':age' => (int) $age,
-        ':sex' => strtoupper(substr(trim((string) ($row['sex'] ?? '')), 0, 10)),
-        ':diagnosis_complaints' => trim((string) ($row['diagnosis_complaints'] ?? '')),
-        ':ent_pvt' => trim((string) ($row['ent_pvt'] ?? '')),
-        ':nonent' => trim((string) ($row['nonent'] ?? '')),
+        ':employee_no' => sanitize($record['employee_no'] ?? ''),
+        ':patient_name' => $patientName,
+        ':address' => sanitize($record['address'] ?? ''),
+        ':age' => (int)$age,
+        ':sex' => substr(strtoupper($sex), 0, 20),
+        ':diagnosis' => $diagnosis,
+        ':ent_pvt' => sanitize($record['ent_pvt'] ?? ''),
+        ':nonent' => sanitize($record['nonent'] ?? ''),
         ':dod' => $dod,
-        ':staff_nurse' => trim((string) ($row['staff_nurse'] ?? '')),
-        ':doctor_name' => trim((string) ($row['doctor_name'] ?? '')),
-        ':remarks' => trim((string) ($row['remarks'] ?? '')),
+        ':staff_nurse' => sanitize($record['staff_nurse'] ?? ''),
+        ':doctor_name' => sanitize($record['doctor_name'] ?? ''),
+        ':remarks' => sanitize($record['remarks'] ?? ''),
     ];
 }
+?>

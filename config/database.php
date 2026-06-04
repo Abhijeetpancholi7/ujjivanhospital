@@ -74,6 +74,104 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// ============================================================================
+// ADDITIONAL HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get PDO instance
+ * @return PDO
+ */
+function getPdo(): PDO {
+    global $pdo;
+    return $pdo;
+}
+
+/**
+ * Send JSON response with proper headers
+ * @param mixed $data Response data
+ * @param int $statusCode HTTP status code
+ */
+function jsonResponse(mixed $data, int $statusCode = 200): void {
+    http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+/**
+ * Read and parse JSON body from request
+ * @return array Parsed JSON data
+ */
+function readJsonBody(): array {
+    $json = file_get_contents('php://input');
+    $data = json_decode($json, true);
+    
+    if (!is_array($data)) {
+        jsonResponse(['success' => false, 'message' => 'Invalid JSON provided.'], 400);
+    }
+    
+    return $data;
+}
+
+/**
+ * Normalize date string to YYYY-MM-DD format
+ * @param string $date Date string in any format
+ * @return string|null Normalized date or null if invalid
+ */
+function normalizeDate(string $date): ?string {
+    $date = trim($date);
+    if ($date === '') {
+        return null;
+    }
+    
+    // Try parsing the date
+    $timestamp = strtotime($date);
+    if ($timestamp === false) {
+        return null;
+    }
+    
+    return date('Y-m-d', $timestamp);
+}
+
+/**
+ * Normalize time string to HH:MM format
+ * @param string $time Time string in any format
+ * @return string|null Normalized time or null if invalid
+ */
+function normalizeTime(string $time): ?string {
+    $time = trim($time);
+    if ($time === '') {
+        return null;
+    }
+    
+    // Try parsing time
+    $timestamp = strtotime('2000-01-01 ' . $time);
+    if ($timestamp === false) {
+        return null;
+    }
+    
+    return date('H:i', $timestamp);
+}
+
+/**
+ * Validate email address
+ * @param string $email Email to validate
+ * @return bool
+ */
+function is_valid_email(string $email): bool {
+    return filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+}
+
+/**
+ * Sanitize string for database storage
+ * @param mixed $value Value to sanitize
+ * @return string Sanitized value
+ */
+function sanitize(mixed $value): string {
+    return trim((string)$value);
+}
+
 // Database table structure for SQL Server (run this once)
 /*
 CREATE TABLE indoor_records (

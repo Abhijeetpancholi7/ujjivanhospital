@@ -331,9 +331,9 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 <body>
 <nav class="navbar navbar-expand-lg app-navbar no-print">
     <div class="container-fluid">
-        <a class="navbar-brand" href="indoor_index.php"><i class="fa-solid fa-hospital-user"></i> Indoor Register Management System</a>
+        <a class="navbar-brand" href="index.php"><i class="fa-solid fa-hospital-user"></i> Indoor Register Management System</a>
         <div class="navbar-nav ms-auto">
-            <a class="nav-link" href="indoor_index.php">Dashboard</a>
+            <a class="nav-link" href="index.php">Dashboard</a>
             <a class="nav-link" href="indoor_print_records.php" target="_blank">Print</a>
         </div>
     </div>

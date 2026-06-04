@@ -10,7 +10,7 @@ $error = clean_value($_GET['error'] ?? '');
 $updated = isset($_GET['updated']);
 
 if ($id) {
-    $stmt = $pdo->prepare('SELECT * FROM indoor_records WHERE id = :id LIMIT 1');
+    $stmt = $pdo->prepare('SELECT TOP 1 * FROM indoor_records WHERE id = :id');
     $stmt->execute([':id' => $id]);
     $record = $stmt->fetch();
 }
@@ -26,7 +26,7 @@ require_once __DIR__ . '/includes/header.php';
                 <h1>UJJIVAN HOSPITAL</h1>
                 <h2>Edit Indoor Patient Record</h2>
             </div>
-            <a class="btn-med btn-primary-med no-print" href="indoor_index.php"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
+            <a class="btn-med btn-primary-med no-print" href="index.php"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
         </header>
 
         <div class="p-3 p-lg-4">
@@ -123,7 +123,7 @@ require_once __DIR__ . '/includes/header.php';
                     <div class="toolbar mt-4">
                         <button class="btn-med btn-success-med" type="submit"><i class="fa-solid fa-floppy-disk"></i> Update Record</button>
                         <a class="btn-med btn-primary-med" href="indoor_print_records.php?id=<?php echo (int) $record['id']; ?>" target="_blank"><i class="fa-solid fa-print"></i> Print Individual</a>
-                        <a class="btn-med btn-muted-med" href="indoor_index.php">Return to Index</a>
+                        <a class="btn-med btn-muted-med" href="index.php">Return to Index</a>
                     </div>
                 </form>
             <?php endif; ?>

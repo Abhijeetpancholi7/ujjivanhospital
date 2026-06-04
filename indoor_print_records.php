@@ -53,9 +53,7 @@ require_once __DIR__ . '/includes/header.php';
 <main class="page-shell">
     <div class="no-print mb-3 d-flex flex-wrap gap-2">
         <button class="btn-med btn-primary-med" type="button" onclick="window.print()"><i class="fa-solid fa-print"></i> Print / Save PDF</button>
-        <a class="btn-med btn-muted-med" href="indoor_index.php">Dashboard</a>
-    </div>
-
+            <a class="btn-med btn-muted-med" href="index.php">Dashboard</a>
     <section class="hospital-card p-3 p-lg-4">
         <div class="print-header text-center">
             <h1 class="fw-black" style="color: #2c3e50;">UJJIVAN HOSPITAL</h1>
