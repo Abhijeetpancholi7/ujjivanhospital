@@ -1,91 +1,105 @@
 <?php
 declare(strict_types=1);
 
-const DB_HOST = '127.0.0.1';
-const DB_NAME = 'clinic';
-const DB_USER = 'root';
-const DB_PASS = '';
-const DB_CHARSET = 'utf8mb4';
+// Database configuration for SQL Server
+$serverName = 'DESKTOP-KHCGP49\\SQLEXPRESS02';
+$database   = 'ujjivan';
+$username   = 'Abhijeetpancholi';
+$password   = 'Monster7@12';
 
-function getPdo(): PDO
-{
-    static $pdo = null;
-
-    if ($pdo instanceof PDO) {
-        return $pdo;
-    }
-
-    $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
-
-    $pdo = new PDO($dsn, DB_USER, DB_PASS, [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-
-    return $pdo;
+try {
+    $dsn = "sqlsrv:Server=$serverName;Database=$database";
+    
+    $pdo = new PDO(
+        $dsn,
+        $username,
+        $password,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false
+        ]
+    );
+} catch (PDOException $e) {
+    die("Connection failed: " . $e->getMessage());
 }
 
-function jsonResponse(array $payload, int $statusCode = 200): void
-{
-    http_response_code($statusCode);
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload, JSON_UNESCAPED_SLASHES);
+// Helper function for escaping HTML output
+function e($string) {
+    return htmlspecialchars((string)$string, ENT_QUOTES, 'UTF-8');
+}
+
+// Helper function for cleaning input values
+function clean_value($value) {
+    if ($value === null) return '';
+    return trim((string)$value);
+}
+
+// CSRF Functions
+function csrf_token() {
+    if (!isset($_SESSION)) {
+        session_start();
+    }
+    if (!isset($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verify_csrf($token) {
+    if (!isset($_SESSION)) {
+        session_start();
+    }
+    if (!isset($_SESSION['csrf_token']) || $token !== $_SESSION['csrf_token']) {
+        return false;
+    }
+    return true;
+}
+
+// JSON response helper
+function json_response($success, $message, $count = 0, $extra = []) {
+    $response = array_merge([
+        'success' => $success,
+        'message' => $message,
+        'count' => $count
+    ], $extra);
+    
+    header('Content-Type: application/json');
+    echo json_encode($response);
     exit;
 }
 
-function readJsonBody(): array
-{
-    $rawBody = file_get_contents('php://input');
-    $data = json_decode($rawBody ?: '', true);
-
-    if (!is_array($data)) {
-        jsonResponse(['success' => false, 'message' => 'Invalid JSON request body.'], 400);
-    }
-
-    return $data;
+// Start session for CSRF if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-function normalizeDate(?string $value): ?string
-{
-    $value = trim((string) $value);
+// Database table structure for SQL Server (run this once)
+/*
+CREATE TABLE indoor_records (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    sno NVARCHAR(50),
+    yearly_no NVARCHAR(50),
+    monthly_no NVARCHAR(50),
+    admission_date DATE,
+    admission_time TIME,
+    employee_no NVARCHAR(100),
+    patient_name NVARCHAR(200) NOT NULL,
+    address NVARCHAR(MAX),
+    age INT,
+    sex NVARCHAR(20),
+    diagnosis NVARCHAR(MAX),
+    ent_pvt NVARCHAR(100),
+    nonent NVARCHAR(100),
+    dod DATE,
+    staff_nurse NVARCHAR(200),
+    doctor_name NVARCHAR(200),
+    remarks NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE(),
+    updated_at DATETIME2 DEFAULT GETDATE()
+);
 
-    if ($value === '') {
-        return null;
-    }
-
-    $formats = ['Y-m-d', 'd/m/Y', 'd-m-Y'];
-
-    foreach ($formats as $format) {
-        $date = DateTimeImmutable::createFromFormat($format, $value);
-        $errors = DateTimeImmutable::getLastErrors();
-
-        if ($date instanceof DateTimeImmutable && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
-            return $date->format('Y-m-d');
-        }
-    }
-
-    return null;
-}
-
-function normalizeTime(?string $value): ?string
-{
-    $value = trim((string) $value);
-
-    if ($value === '') {
-        return null;
-    }
-
-    $formats = ['H:i', 'H:i:s', 'h:i A', 'h:i a'];
-
-    foreach ($formats as $format) {
-        $time = DateTimeImmutable::createFromFormat($format, $value);
-        $errors = DateTimeImmutable::getLastErrors();
-
-        if ($time instanceof DateTimeImmutable && ($errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0))) {
-            return $time->format('H:i:s');
-        }
-    }
-
-    return null;
-}
+CREATE INDEX idx_admission_date ON indoor_records(admission_date);
+CREATE INDEX idx_patient_name ON indoor_records(patient_name);
+*/
+?>
